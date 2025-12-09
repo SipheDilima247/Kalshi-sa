@@ -5,13 +5,21 @@ import { Button } from '@/components/ui/button';
 import {
   ConnectionProvider,
   WalletProvider,
+  useWallet,
 } from '@solana/wallet-adapter-react';
-import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { PhantomWalletAdapter, } from '@solana/wallet-adapter-wallets';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { clusterApiUrl } from '@solana/web3.js';
+import dynamic from 'next/dynamic';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 const TOKEN_NAME = '$MZANSHI';
+
+// Dynamic import to avoid hydration mismatch
+const WalletMultiButtonDynamic = dynamic(
+  async () => (await import('@solana/wallet-adapter-react-ui')).WalletMultiButton,
+  { ssr: false }
+);
 
 export default function Page() {
   const endpoint = clusterApiUrl('mainnet-beta');
@@ -35,8 +43,9 @@ export default function Page() {
 }
 
 function HomeContent() {
-  const [wallet, setWallet] = useState(10000);
-  const [mzanshiBalance, setMzanshiBalance] = useState(0);
+  const [wallet, setWallet] = useState(10000); // Fake ZAR
+  const [mzanshiBalance, setMzanshiBalance] = useState(0); // $MZANSHI balance
+  const { connected, publicKey, connecting } = useWallet();
 
   const depositMzanshi = () => {
     setMzanshiBalance(prev => prev + 5000);
@@ -46,10 +55,15 @@ function HomeContent() {
   const buy = (side: string, price: number) => {
     const cost = price * 100;
     if (mzanshiBalance >= cost || wallet >= cost) {
-      if (mzanshiBalance >= cost) setMzanshiBalance(p => p - cost);
-      else setWallet(p => p - cost);
+      if (mzanshiBalance >= cost) {
+        setMzanshiBalance(p => p - cost);
+      } else {
+        setWallet(p => p - cost);
+      }
       alert(`Bought ${side} with ${mzanshiBalance >= cost ? TOKEN_NAME : 'ZAR'}`);
-    } else alert('Not enough funds');
+    } else {
+      alert('Not enough funds');
+    }
   };
 
   const markets = [
@@ -66,14 +80,25 @@ function HomeContent() {
         <h1 className="text-6xl font-bold text-center mb-4">KALSHI.CO.ZA</h1>
 
         <div className="flex justify-center gap-6 mb-8 flex-wrap">
-          <WalletMultiButton className="!bg-purple-600 hover:!bg-purple-700 !text-white" />
-          <Button onClick={depositMzanshi} className="bg-green-600 hover:bg-green-700">
+          <WalletMultiButtonDynamic className="!bg-purple-600 hover:!bg-purple-700 !text-white" />
+          <Button
+            onClick={depositMzanshi}
+            className="bg-green-600 hover:bg-green-700"
+            disabled={!connected}
+          >
             Claim 5,000 {TOKEN_NAME}
           </Button>
         </div>
 
         <div className="text-center mb-8 text-xl">
           ZAR: R{wallet} | {TOKEN_NAME}: {mzanshiBalance.toLocaleString()}
+          {connected && publicKey && (
+            <p className="text-sm text-yellow-400">
+              Connected: {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-4)}
+            </p>
+          )}
+          {connecting && <p className="text-sm text-blue-400">Connecting...</p>}
+          {!connected && !connecting && <p className="text-sm text-gray-500">Wallet not connected</p>}
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -81,10 +106,18 @@ function HomeContent() {
             <div key={i} className="bg-gray-900 border border-green-500 rounded-lg p-6">
               <h3 className="font-bold mb-4">{m.q}</h3>
               <div className="space-y-3">
-                <Button onClick={() => buy("YES", m.yes)} className="w-full bg-green-600 hover:bg-green-500">
+                <Button
+                  onClick={() => buy("YES", m.yes)}
+                  className="w-full bg-green-600 hover:bg-green-500"
+                  disabled={!connected}
+                >
                   YES — R{m.yes.toFixed(2)} ({(m.yes * 100).toFixed(0)}%)
                 </Button>
-                <Button onClick={() => buy("NO", m.no)} className="w-full bg-red-600 hover:bg-red-500">
+                <Button
+                  onClick={() => buy("NO", m.no)}
+                  className="w-full bg-red-600 hover:bg-red-500"
+                  disabled={!connected}
+                >
                   NO — R{m.no.toFixed(2)} ({(m.no * 100).toFixed(0)}%)
                 </Button>
               </div>
