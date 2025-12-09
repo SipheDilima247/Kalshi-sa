@@ -7,7 +7,20 @@ import {
   WalletProvider,
 } from '@solana/wallet-adapter-react';
 import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import {
+  ConnectionProvider,
+  WalletProvider,
+} from '@solana/wallet-adapter-react';
+import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import {
+  PhantomWalletAdapter,
+  BackpackWalletAdapter,
+  OKXWalletAdapter,
+  SolflareWalletAdapter,
+  TrustWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
+import { clusterApiUrl } from '@solana/web3.js';
+import '@solana/wallet-adapter-react-ui/styles.css';
 import { clusterApiUrl } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -16,12 +29,13 @@ const TOKEN_NAME = '$MZANSHI';
 export default function Page() {
   const endpoint = clusterApiUrl('mainnet-beta');
 
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-    ],
-    []
-  );
+  const wallets = useMemo(() => [
+    new PhantomWalletAdapter(),
+    new BackpackWalletAdapter(),
+    new OKXWalletAdapter(),
+    new SolflareWalletAdapter(),
+    new TrustWalletAdapter(),
+  ], []);
 
   return (
     <ConnectionProvider endpoint={endpoint}>
