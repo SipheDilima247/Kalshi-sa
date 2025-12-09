@@ -16,9 +16,21 @@ const TOKEN_NAME = '$MZANSHI';
 export default function Page() {
   const endpoint = clusterApiUrl('mainnet-beta');
 
+  import {
+    PhantomWalletAdapter,
+    BackpackWalletAdapter,
+    OKXWalletAdapter,
+    SolflareWalletAdapter,
+    TrustWalletAdapter,
+  } from '@solana/wallet-adapter-wallets';
+
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
+      new BackpackWalletAdapter(),
+      new OKXWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new TrustWalletAdapter(),
     ],
     []
   );
