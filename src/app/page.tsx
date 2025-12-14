@@ -40,14 +40,15 @@ export default function Page() {
 }
 
 function HomeContent() {
-  const [wallet, setWallet] = useState(10000);
-  const [mzanshiBalance, setMzanshiBalance] = useState(0);
+  const [wallet, setWallet] = useState(10000); // ZAR balance
+  const [mzanshiBalance, setMzanshiBalance] = useState(0); // $MZANSHI balance
   const [hasClaimedSignupAirdrop, setHasClaimedSignupAirdrop] = useState(false);
   const { connected, publicKey, connecting, disconnect } = useWallet();
   const [selectedMarket, setSelectedMarket] = useState<number | null>(null);
   const [wagerAmount, setWagerAmount] = useState(100);
-  const [paymentMethod, setPaymentMethod] = useState<'ZAR' | TOKEN_NAME>('ZAR');
+  const [paymentMethod, setPaymentMethod] = useState<'ZAR' | '$MZANSHI'>('ZAR'); // Fixed type
 
+  // Transaction history
   const [transactionHistory, setTransactionHistory] = useState([
     { date: "2025-12-14", type: "Airdrop", amount: "+5,000", token: TOKEN_NAME, status: "Completed" },
     { date: "2025-12-13", type: "Bet", amount: "-200", token: "ZAR", market: "Load-shedding ends by 2026?", side: "YES", status: "Pending" },
@@ -85,7 +86,7 @@ function HomeContent() {
 
   const buy = (side: string, price: number, fromModal = false) => {
     const cost = price * wagerAmount;
-    const usingToken = paymentMethod === TOKEN_NAME && mzanshiBalance >= cost;
+    const usingToken = paymentMethod === '$MZANSHI' && mzanshiBalance >= cost;
 
     if (usingToken || wallet >= cost) {
       if (usingToken) {
@@ -111,11 +112,56 @@ function HomeContent() {
   };
 
   const markets = [
-    { id: 1, q: "Load-shedding ends by end of 2026?", description: "Will Eskom and the South African government finally solve the electricity crisis and eliminate scheduled power cuts (load-shedding) nationwide by December 31, 2026? This market resolves YES if there are no official load-shedding stages implemented in 2026.", yes: 0.58, no: 0.42, volumeYes: 12450, volumeNo: 8750, image: "/images/load-shedding.jpg" },
-    { id: 2, q: "Rand breaks R20 to USD in 2026?", description: "Will the South African Rand weaken to trade at or above R20 per USD at any point in 2026? This market resolves YES if the official USD/ZAR rate hits 20.00 or higher on any trading day in 2026.", yes: 0.67, no: 0.33, volumeYes: 18900, volumeNo: 9200, image: "/images/rand-crash.jpg" },
-    { id: 3, q: "EFF gets 20%+ in 2026 elections?", description: "Will the Economic Freedom Fighters (EFF) receive 20% or more of the national vote in the 2026 South African general elections? Market resolves based on official IEC results.", yes: 0.31, no: 0.69, volumeYes: 5600, volumeNo: 14200, image: "/images/eff.jpg" },
-    { id: 4, q: "Springboks win Rugby World Cup 2027?", description: "Will the South African Springboks win the Rugby World Cup in 2027? Market resolves YES if South Africa lifts the Webb Ellis Cup in the final.", yes: 0.44, no: 0.56, volumeYes: 15800, volumeNo: 11200, image: "/images/springboks.jpg" },
-    { id: 5, q: "Bafana qualifies for 2026 World Cup?", description: "Will Bafana Bafana (South Africa national football team) qualify for the 2026 FIFA World Cup? Includes any route (automatic or playoffs). Resolves based on official FIFA qualification.", yes: 0.39, no: 0.61, volumeYes: 9800, volumeNo: 15200, image: "/images/bafana.jpg" },
+    {
+      id: 1,
+      q: "Load-shedding ends by end of 2026?",
+      description: "Will Eskom and the South African government finally solve the electricity crisis and eliminate scheduled power cuts (load-shedding) nationwide by December 31, 2026? This market resolves YES if there are no official load-shedding stages implemented in 2026.",
+      yes: 0.58,
+      no: 0.42,
+      volumeYes: 12450,
+      volumeNo: 8750,
+      image: "/images/load-shedding.jpg"
+    },
+    {
+      id: 2,
+      q: "Rand breaks R20 to USD in 2026?",
+      description: "Will the South African Rand weaken to trade at or above R20 per USD at any point in 2026? This market resolves YES if the official USD/ZAR rate hits 20.00 or higher on any trading day in 2026.",
+      yes: 0.67,
+      no: 0.33,
+      volumeYes: 18900,
+      volumeNo: 9200,
+      image: "/images/rand-crash.jpg"
+    },
+    {
+      id: 3,
+      q: "EFF gets 20%+ in 2026 elections?",
+      description: "Will the Economic Freedom Fighters (EFF) receive 20% or more of the national vote in the 2026 South African general elections? Market resolves based on official IEC results.",
+      yes: 0.31,
+      no: 0.69,
+      volumeYes: 5600,
+      volumeNo: 14200,
+      image: "/images/eff.jpg"
+    },
+    {
+      id: 4,
+      q: "Springboks win Rugby World Cup 2027?",
+      description: "Will the South African Springboks win the Rugby World Cup in 2027? Market resolves YES if South Africa lifts the Webb Ellis Cup in the final.",
+      yes: 0.44,
+      no: 0.56,
+      volumeYes: 15800,
+      volumeNo: 11200,
+      image: "/images/springboks.jpg"
+    },
+    {
+      id: 5,
+      q: "Bafana qualifies for 2026 World Cup?",
+      description: "Will Bafana Bafana (South Africa national football team) qualify for the 2026 FIFA World Cup? Includes any route (automatic or playoffs). Resolves based on official FIFA qualification.",
+      yes: 0.39,
+      no: 0.61,
+      volumeYes: 9800,
+      volumeNo: 15200,
+      image: "/images/bafana.jpg"
+    },
   ];
 
   const market = selectedMarket !== null ? markets.find(m => m.id === selectedMarket) : null;
@@ -125,12 +171,12 @@ function HomeContent() {
       <div className="max-w-6xl mx-auto relative">
         {/* Logo + Headline */}
         <div className="text-center mb-8">
-          <img src="/mzanshi-logo.jpg" alt="$MZANSHI Logo" className="mx-auto w-24 h-24 md:w-32 md:h-32 object-contain mb-4 drop-shadow-2xl animate-pulse-slow" />
+          <img src="/mzanshi-logo.png" alt="$MZANSHI Logo" className="mx-auto w-24 h-24 md:w-32 md:h-32 object-contain mb-4 drop-shadow-2xl animate-pulse-slow" />
           <h1 className="text-4xl md:text-6xl font-bold">KALSHI.CO.ZA</h1>
           <p className="text-lg md:text-xl text-green-300 mt-2">Mzansi Prediction Markets • Powered by {TOKEN_NAME}</p>
         </div>
 
-        {/* Burger Menu Icon - Now always visible */}
+        {/* Burger Menu Icon */}
         <Sheet>
           <SheetTrigger asChild>
             <Button
@@ -289,13 +335,13 @@ function HomeContent() {
                         {paymentMethod === 'ZAR' && <Zap className="ml-2" size={20} />}
                       </Button>
                       <Button
-                        onClick={() => setPaymentMethod(TOKEN_NAME)}
-                        variant={paymentMethod === TOKEN_NAME ? 'default' : 'outline'}
-                        className={paymentMethod === TOKEN_NAME ? 'bg-purple-600 hover:bg-purple-500' : 'border-purple-500'}
+                        onClick={() => setPaymentMethod('$MZANSHI')}
+                        variant={paymentMethod === '$MZANSHI' ? 'default' : 'outline'}
+                        className={paymentMethod === '$MZANSHI' ? 'bg-purple-600 hover:bg-purple-500' : 'border-purple-500'}
                         disabled={mzanshiBalance === 0}
                       >
                         Pay with {TOKEN_NAME}
-                        {paymentMethod === TOKEN_NAME && <Zap className="ml-2" size={20} />}
+                        {paymentMethod === '$MZANSHI' && <Zap className="ml-2" size={20} />}
                       </Button>
                     </div>
 
