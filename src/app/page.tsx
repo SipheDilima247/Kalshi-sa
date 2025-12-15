@@ -171,7 +171,7 @@ function HomeContent() {
       <div className="max-w-6xl mx-auto relative">
         {/* Logo + Headline */}
         <div className="text-center mb-8">
-          <img src="/mzanshi-logo.png" alt="$MZANSHI Logo" className="mx-auto w-24 h-24 md:w-32 md:h-32 object-contain mb-4 drop-shadow-2xl animate-pulse-slow" />
+          <img src="/mzanshi-logo.jpg" alt="$MZANSHI Logo" className="mx-auto w-24 h-24 md:w-32 md:h-32 object-contain mb-4 drop-shadow-2xl animate-pulse-slow" />
           <h1 className="text-4xl md:text-6xl font-bold">KALSHI.CO.ZA</h1>
           <p className="text-lg md:text-xl text-green-300 mt-2">Mzansi Prediction Markets • Powered by {TOKEN_NAME}</p>
         </div>
