@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { AlertCircle, Wallet, CheckCircle2, Zap, LogOut, Menu, History } from 'lucide-react';
+import { Wallet, CheckCircle2, LogOut, Menu, History, Zap } from 'lucide-react';
 import {
   ConnectionProvider,
   WalletProvider,
@@ -12,11 +12,13 @@ import {
 } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
-import { clusterApiUrl } from '@solana/web3.js';
+import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
 import dynamic from 'next/dynamic';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 const TOKEN_NAME = '$MZANSHI';
+const TOKEN_MINT_ADDRESS = new PublicKey('F8T88FzoJXQW22Aiyg717akNHCxHGJucsxW8GH16pump'); // ← Replace with your actual pump.fun mint address
 
 const WalletMultiButtonDynamic = dynamic(
   async () => (await import('@solana/wallet-adapter-react-ui')).WalletMultiButton,
@@ -30,7 +32,7 @@ export default function Page() {
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>
           <HomeContent />
         </WalletModalProvider>
@@ -40,21 +42,42 @@ export default function Page() {
 }
 
 function HomeContent() {
-  const [wallet, setWallet] = useState(10000); // ZAR balance
-  const [mzanshiBalance, setMzanshiBalance] = useState(0); // $MZANSHI balance
+  const [wallet, setWallet] = useState(10000); // Fake ZAR balance
+  const [mzanshiBalance, setMzanshiBalance] = useState(0);
   const [hasClaimedSignupAirdrop, setHasClaimedSignupAirdrop] = useState(false);
-  const { connected, publicKey, connecting, disconnect } = useWallet();
+  const { connected, publicKey, disconnect } = useWallet();
   const [selectedMarket, setSelectedMarket] = useState<number | null>(null);
   const [wagerAmount, setWagerAmount] = useState(100);
-  const [paymentMethod, setPaymentMethod] = useState<'ZAR' | '$MZANSHI'>('ZAR'); // Fixed type
+  const [paymentMethod, setPaymentMethod] = useState<'ZAR' | '$MZANSHI'>('ZAR');
 
-  // Transaction history
   const [transactionHistory, setTransactionHistory] = useState([
-    { date: "2025-12-14", type: "Airdrop", amount: "+5,000", token: TOKEN_NAME, status: "Completed" },
-    { date: "2025-12-13", type: "Bet", amount: "-200", token: "ZAR", market: "Load-shedding ends by 2026?", side: "YES", status: "Pending" },
-    { date: "2025-12-12", type: "Bet", amount: "-500", token: TOKEN_NAME, market: "Springboks win RWC 2027?", side: "YES", status: "Won (+1,136)" },
+    { date: "2025-12-17", type: "Airdrop", amount: "+5,000", token: TOKEN_NAME, status: "Completed" },
+    { date: "2025-12-16", type: "Bet", amount: "-200", token: "ZAR", market: "Load-shedding ends by 2026?", side: "YES", status: "Pending" },
+    { date: "2025-12-15", type: "Bet", amount: "-500", token: TOKEN_NAME, market: "Springboks win RWC 2027?", side: "YES", status: "Won (+1,136)" },
   ]);
 
+  const connection = new Connection(clusterApiUrl('mainnet-beta'));
+
+  // Fetch real $MZANSHI balance when connected
+  useEffect(() => {
+    if (connected && publicKey) {
+      const fetchBalance = async () => {
+        try {
+          const ata = await getAssociatedTokenAddress(TOKEN_MINT_ADDRESS, publicKey);
+          const account = await getAccount(connection, ata);
+          setMzanshiBalance(Number(account.amount) / 1e9); // Assuming 9 decimals
+        } catch (err) {
+          console.log('No $MZANSHI token account found:', err);
+          setMzanshiBalance(0);
+        }
+      };
+      fetchBalance();
+    } else {
+      setMzanshiBalance(0);
+    }
+  }, [connected, publicKey]);
+
+  // Signup airdrop (demo mode)
   useEffect(() => {
     if (connected && publicKey && mzanshiBalance === 0 && !hasClaimedSignupAirdrop) {
       setMzanshiBalance(5000);
@@ -112,56 +135,11 @@ function HomeContent() {
   };
 
   const markets = [
-    {
-      id: 1,
-      q: "Load-shedding ends by end of 2026?",
-      description: "Will Eskom and the South African government finally solve the electricity crisis and eliminate scheduled power cuts (load-shedding) nationwide by December 31, 2026? This market resolves YES if there are no official load-shedding stages implemented in 2026.",
-      yes: 0.58,
-      no: 0.42,
-      volumeYes: 12450,
-      volumeNo: 8750,
-      image: "/images/load-shedding.jpg"
-    },
-    {
-      id: 2,
-      q: "Rand breaks R20 to USD in 2026?",
-      description: "Will the South African Rand weaken to trade at or above R20 per USD at any point in 2026? This market resolves YES if the official USD/ZAR rate hits 20.00 or higher on any trading day in 2026.",
-      yes: 0.67,
-      no: 0.33,
-      volumeYes: 18900,
-      volumeNo: 9200,
-      image: "/images/rand-crash.jpg"
-    },
-    {
-      id: 3,
-      q: "EFF gets 20%+ in 2026 elections?",
-      description: "Will the Economic Freedom Fighters (EFF) receive 20% or more of the national vote in the 2026 South African general elections? Market resolves based on official IEC results.",
-      yes: 0.31,
-      no: 0.69,
-      volumeYes: 5600,
-      volumeNo: 14200,
-      image: "/images/eff.jpg"
-    },
-    {
-      id: 4,
-      q: "Springboks win Rugby World Cup 2027?",
-      description: "Will the South African Springboks win the Rugby World Cup in 2027? Market resolves YES if South Africa lifts the Webb Ellis Cup in the final.",
-      yes: 0.44,
-      no: 0.56,
-      volumeYes: 15800,
-      volumeNo: 11200,
-      image: "/images/springboks.jpg"
-    },
-    {
-      id: 5,
-      q: "Bafana qualifies for 2026 World Cup?",
-      description: "Will Bafana Bafana (South Africa national football team) qualify for the 2026 FIFA World Cup? Includes any route (automatic or playoffs). Resolves based on official FIFA qualification.",
-      yes: 0.39,
-      no: 0.61,
-      volumeYes: 9800,
-      volumeNo: 15200,
-      image: "/images/bafana.jpg"
-    },
+    { id: 1, q: "Load-shedding ends by end of 2026?", description: "Will Eskom and the South African government finally solve the electricity crisis and eliminate scheduled power cuts (load-shedding) nationwide by December 31, 2026? This market resolves YES if there are no official load-shedding stages implemented in 2026.", yes: 0.58, no: 0.42, volumeYes: 12450, volumeNo: 8750, image: "/images/load-shedding.jpg" },
+    { id: 2, q: "Rand breaks R20 to USD in 2026?", description: "Will the South African Rand weaken to trade at or above R20 per USD at any point in 2026? This market resolves YES if the official USD/ZAR rate hits 20.00 or higher on any trading day in 2026.", yes: 0.67, no: 0.33, volumeYes: 18900, volumeNo: 9200, image: "/images/rand-crash.jpg" },
+    { id: 3, q: "EFF gets 20%+ in 2026 elections?", description: "Will the Economic Freedom Fighters (EFF) receive 20% or more of the national vote in the 2026 South African general elections? Market resolves based on official IEC results.", yes: 0.31, no: 0.69, volumeYes: 5600, volumeNo: 14200, image: "/images/eff.jpg" },
+    { id: 4, q: "Springboks win Rugby World Cup 2027?", description: "Will the South African Springboks win the Rugby World Cup in 2027? Market resolves YES if South Africa lifts the Webb Ellis Cup in the final.", yes: 0.44, no: 0.56, volumeYes: 15800, volumeNo: 11200, image: "/images/springboks.jpg" },
+    { id: 5, q: "Bafana qualifies for 2026 World Cup?", description: "Will Bafana Bafana (South Africa national football team) qualify for the 2026 FIFA World Cup? Includes any route (automatic or playoffs). Resolves based on official FIFA qualification.", yes: 0.39, no: 0.61, volumeYes: 9800, volumeNo: 15200, image: "/images/bafana.jpg" },
   ];
 
   const market = selectedMarket !== null ? markets.find(m => m.id === selectedMarket) : null;
@@ -179,11 +157,7 @@ function HomeContent() {
         {/* Burger Menu Icon */}
         <Sheet>
           <SheetTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              className="fixed top-4 right-4 z-50 bg-gray-900 border-green-500 hover:bg-gray-800 shadow-lg"
-            >
+            <Button variant="outline" size="icon" className="fixed top-4 right-4 z-50 bg-gray-900 border-green-500 hover:bg-gray-800 shadow-lg">
               <Menu className="h-7 w-7" />
             </Button>
           </SheetTrigger>
@@ -221,9 +195,9 @@ function HomeContent() {
         {/* Wallet / Login Section */}
         <div className="bg-gray-900 border border-green-500 rounded-xl p-6 mb-10 text-center">
           <div className="flex justify-center items-center gap-6 flex-wrap mb-6">
-            {connected ? (
+            <WalletMultiButtonDynamic className="!bg-purple-600 hover:!bg-purple-700 !text-xl !px-10 !py-5" />
+            {connected && (
               <>
-                <WalletMultiButtonDynamic className="!bg-purple-600 hover:!bg-purple-700 !text-lg !px-8 !py-4" />
                 <Button onClick={disconnect} variant="outline" className="border-red-500 text-red-400 hover:bg-red-900 text-lg px-8 py-4">
                   <LogOut className="mr-2" size={20} /> Logout
                 </Button>
@@ -231,28 +205,20 @@ function HomeContent() {
                   Claim Extra 5,000 {TOKEN_NAME}
                 </Button>
               </>
-            ) : (
-              <WalletMultiButtonDynamic className="!bg-purple-600 hover:!bg-purple-700 !text-xl !px-10 !py-5" />
             )}
           </div>
 
-          <div className="flex justify-center items-center gap-3 text-lg">
+          <div className="flex flex-col items-center gap-3 text-lg">
             {connected && publicKey && (
               <>
                 <CheckCircle2 className="text-green-500" size={28} />
                 <span>Logged in: {publicKey.toBase58().slice(0, 6)}...{publicKey.toBase58().slice(-4)}</span>
               </>
             )}
-            {connecting && (
-              <>
-                <AlertCircle className="text-yellow-500 animate-pulse" size={28} />
-                <span>Logging in with wallet...</span>
-              </>
-            )}
-            {!connected && !connecting && (
+            {!connected && (
               <>
                 <Wallet className="text-gray-500" size={28} />
-                <span>Login with wallet to bet & claim airdrop</span>
+                <span>Click the purple button above to connect wallet & login</span>
               </>
             )}
           </div>
@@ -267,7 +233,7 @@ function HomeContent() {
         {!connected ? (
           <div className="text-center py-20">
             <Wallet size={64} className="mx-auto mb-6 text-gray-600" />
-            <p className="text-2xl text-gray-400">Login with your wallet to place bets and claim {TOKEN_NAME} airdrop</p>
+            <p className="text-2xl text-gray-400">Connect your wallet to place bets and claim {TOKEN_NAME} airdrop</p>
             <p className="text-lg text-gray-500 mt-4">Phantom or Brave Wallet recommended</p>
           </div>
         ) : (
