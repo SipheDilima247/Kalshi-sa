@@ -9,16 +9,20 @@ import {
   ConnectionProvider,
   WalletProvider,
   useWallet,
+  useConnection,
 } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
-import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js';
+import { clusterApiUrl, Connection, PublicKey, TransactionSignature } from '@solana/web3.js';
 import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
+import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
+import idl from '@/idl/my_escrow.json'; // Copy from target/idl/my_escrow.json
 import dynamic from 'next/dynamic';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 const TOKEN_NAME = '$MZANSHI';
-const TOKEN_MINT_ADDRESS = new PublicKey('F8T88FzoJXQW22Aiyg717akNHCxHGJucsxW8GH16pump'); // ← Replace with your actual pump.fun mint address
+const TOKEN_MINT_ADDRESS = new PublicKey('F8T88FzoJXQW22Aiyg717akNHCxHGJucsxW8GH16pump');
+const PROGRAM_ID = new PublicKey('DhqAbqRh3QGfpud9DqqqVs7jM4t24veHHvCcDD3gNBV4');
 
 const WalletMultiButtonDynamic = dynamic(
   async () => (await import('@solana/wallet-adapter-react-ui')).WalletMultiButton,
@@ -26,13 +30,13 @@ const WalletMultiButtonDynamic = dynamic(
 );
 
 export default function Page() {
-  const endpoint = clusterApiUrl('mainnet-beta');
+  const endpoint = clusterApiUrl('devnet'); // Switch to 'mainnet-beta' for production
 
   const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect={false}>
+      <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
           <HomeContent />
         </WalletModalProvider>
@@ -42,13 +46,17 @@ export default function Page() {
 }
 
 function HomeContent() {
-  const [wallet, setWallet] = useState(10000); // Fake ZAR balance
+  const { connection } = useConnection();
+  const wallet = useWallet();
+  const { connected, publicKey, disconnect } = wallet;
+
+  const [zarBalance, setZarBalance] = useState(10000); // Fake ZAR
   const [mzanshiBalance, setMzanshiBalance] = useState(0);
   const [hasClaimedSignupAirdrop, setHasClaimedSignupAirdrop] = useState(false);
-  const { connected, publicKey, disconnect } = useWallet();
   const [selectedMarket, setSelectedMarket] = useState<number | null>(null);
   const [wagerAmount, setWagerAmount] = useState(100);
   const [paymentMethod, setPaymentMethod] = useState<'ZAR' | '$MZANSHI'>('ZAR');
+  const [isBetting, setIsBetting] = useState(false);
 
   const [transactionHistory, setTransactionHistory] = useState([
     { date: "2025-12-17", type: "Airdrop", amount: "+5,000", token: TOKEN_NAME, status: "Completed" },
@@ -56,18 +64,16 @@ function HomeContent() {
     { date: "2025-12-15", type: "Bet", amount: "-500", token: TOKEN_NAME, market: "Springboks win RWC 2027?", side: "YES", status: "Won (+1,136)" },
   ]);
 
-  const connection = new Connection(clusterApiUrl('mainnet-beta'));
-
-  // Fetch real $MZANSHI balance when connected
+  // Fetch real $MZANSHI balance on connect/change
   useEffect(() => {
     if (connected && publicKey) {
       const fetchBalance = async () => {
         try {
           const ata = await getAssociatedTokenAddress(TOKEN_MINT_ADDRESS, publicKey);
           const account = await getAccount(connection, ata);
-          setMzanshiBalance(Number(account.amount) / 1e9); // Assuming 9 decimals
+          setMzanshiBalance(Number(account.amount) / 1e9);
         } catch (err) {
-          console.log('No $MZANSHI token account found:', err);
+          console.log('No $MZANSHI ATA found:', err);
           setMzanshiBalance(0);
         }
       };
@@ -75,9 +81,9 @@ function HomeContent() {
     } else {
       setMzanshiBalance(0);
     }
-  }, [connected, publicKey]);
+  }, [connected, publicKey, connection]);
 
-  // Signup airdrop (demo mode)
+  // Signup airdrop (demo only)
   useEffect(() => {
     if (connected && publicKey && mzanshiBalance === 0 && !hasClaimedSignupAirdrop) {
       setMzanshiBalance(5000);
@@ -89,14 +95,12 @@ function HomeContent() {
         token: TOKEN_NAME,
         status: "Completed"
       }, ...prev]);
-      setTimeout(() => {
-        alert(`🎉 Welcome to KALSHI.CO.ZA!\n5,000 ${TOKEN_NAME} airdropped as signup bonus!`);
-      }, 1000);
+      setTimeout(() => alert(`🎉 Welcome to KALSHI.CO.ZA!\n5,000 ${TOKEN_NAME} airdropped!`), 1000);
     }
   }, [connected, publicKey, mzanshiBalance, hasClaimedSignupAirdrop]);
 
   const claimExtraAirdrop = () => {
-    setMzanshiBalance(prev => prev + 5000);
+    setMzanshiBalance(p => p + 5000);
     setTransactionHistory(prev => [{
       date: new Date().toISOString().split('T')[0],
       type: "Extra Airdrop",
@@ -107,31 +111,107 @@ function HomeContent() {
     alert(`🎉 Extra 5,000 ${TOKEN_NAME} airdropped!`);
   };
 
-  const buy = (side: string, price: number, fromModal = false) => {
-    const cost = price * wagerAmount;
-    const usingToken = paymentMethod === '$MZANSHI' && mzanshiBalance >= cost;
+  const buy = async (side: 'YES' | 'NO', price: number, fromModal = false) => {
+    if (!market) {
+      alert("No market selected!");
+      return;
+    }
 
-    if (usingToken || wallet >= cost) {
-      if (usingToken) {
-        setMzanshiBalance(p => p - cost);
-      } else {
-        setWallet(p => p - cost);
+    const cost = price * wagerAmount;
+    const usingToken = paymentMethod === '$MZANSHI';
+
+    if (usingToken) {
+      if (mzanshiBalance < cost) {
+        alert(`Not enough ${TOKEN_NAME}! Need at least ${cost}`);
+        return;
       }
-      const newTx = {
+
+      if (!publicKey || !wallet?.signTransaction) {
+        alert("Connect wallet first!");
+        return;
+      }
+
+      setIsBetting(true);
+
+      try {
+        const provider = new AnchorProvider(connection, wallet as any, { commitment: 'confirmed' });
+        const program = new Program(idl as any, PROGRAM_ID, provider);
+
+        // Derive market PDA
+        const [marketPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from("market"), new BN(selectedMarket).toArrayLike(Buffer, "le", 8)],
+          PROGRAM_ID
+        );
+
+        // Derive vaults (adjust seeds to match your initialize_market exactly)
+        const [yesVault] = PublicKey.findProgramAddressSync(
+          [Buffer.from("yes_vault"), marketPda.toBuffer()],
+          PROGRAM_ID
+        );
+        const [noVault] = PublicKey.findProgramAddressSync(
+          [Buffer.from("no_vault"), marketPda.toBuffer()],
+          PROGRAM_ID
+        );
+
+        const userTokenAccount = await getAssociatedTokenAddress(TOKEN_MINT_ADDRESS, publicKey);
+
+        const txSig: TransactionSignature = await program.methods
+          .placeBet(new BN(cost * 1e9), side === 'YES') // 9 decimals
+          .accounts({
+            market: marketPda,
+            yesVault,
+            noVault,
+            userTokenAccount,
+            tokenMint: TOKEN_MINT_ADDRESS,
+            user: publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc();
+
+        alert(`On-chain bet placed! Tx: ${txSig}\nCheck: https://explorer.solana.com/tx/${txSig}?cluster=devnet`);
+
+        // Refresh real balance from chain (accurate subtraction)
+        const ata = await getAssociatedTokenAddress(TOKEN_MINT_ADDRESS, publicKey);
+        const account = await getAccount(connection, ata);
+        setMzanshiBalance(Number(account.amount) / 1e9);
+
+        // Add to history
+        setTransactionHistory(prev => [{
+          date: new Date().toISOString().split('T')[0],
+          type: "Bet",
+          amount: `-${wagerAmount}`,
+          token: TOKEN_NAME,
+          market: market.q || "Unknown",
+          side,
+          status: "Pending"
+        }, ...prev]);
+      } catch (err: any) {
+        console.error("Bet error:", err);
+        alert("On-chain bet failed: " + (err.message || "Unknown error"));
+        // Balance not subtracted - tx failed
+      } finally {
+        setIsBetting(false);
+      }
+    } else {
+      // Fake ZAR (unchanged)
+      if (zarBalance < cost) {
+        alert("Not enough ZAR!");
+        return;
+      }
+      setZarBalance(p => p - cost);
+      setTransactionHistory(prev => [{
         date: new Date().toISOString().split('T')[0],
         type: "Bet",
         amount: `-${wagerAmount}`,
-        token: usingToken ? TOKEN_NAME : 'ZAR',
-        market: market?.q || "Unknown",
+        token: 'ZAR',
+        market: market.q || "Unknown",
         side,
         status: "Pending"
-      };
-      setTransactionHistory(prev => [newTx, ...prev]);
-      alert(`Bet placed: R${wagerAmount} on ${side} ✅\nPaid with ${usingToken ? TOKEN_NAME : 'ZAR'}`);
-      if (fromModal) setSelectedMarket(null);
-    } else {
-      alert(`Not enough ${usingToken ? TOKEN_NAME : 'ZAR'}!`);
+      }, ...prev]);
+      alert(`Bet placed: R${wagerAmount} on ${side} ✅ (ZAR)`);
     }
+
+    if (fromModal) setSelectedMarket(null);
   };
 
   const markets = [
@@ -154,7 +234,7 @@ function HomeContent() {
           <p className="text-lg md:text-xl text-green-300 mt-2">Mzansi Prediction Markets • Powered by {TOKEN_NAME}</p>
         </div>
 
-        {/* Burger Menu Icon */}
+        {/* Burger Menu */}
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="outline" size="icon" className="fixed top-4 right-4 z-50 bg-gray-900 border-green-500 hover:bg-gray-800 shadow-lg">
@@ -192,7 +272,7 @@ function HomeContent() {
           </SheetContent>
         </Sheet>
 
-        {/* Wallet / Login Section */}
+        {/* Wallet / Login */}
         <div className="bg-gray-900 border border-green-500 rounded-xl p-6 mb-10 text-center">
           <div className="flex justify-center items-center gap-6 flex-wrap mb-6">
             <WalletMultiButtonDynamic className="!bg-purple-600 hover:!bg-purple-700 !text-xl !px-10 !py-5" />
@@ -218,23 +298,22 @@ function HomeContent() {
             {!connected && (
               <>
                 <Wallet className="text-gray-500" size={28} />
-                <span>Click the purple button above to connect wallet & login</span>
+                <span>Click the purple button to connect & login</span>
               </>
             )}
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-8 text-xl">
-            <div>ZAR Balance: <strong>R{wallet.toLocaleString('en-US')}</strong></div>
+            <div>ZAR Balance: <strong>R{zarBalance.toLocaleString('en-US')}</strong></div>
             <div>{TOKEN_NAME} Balance: <strong>{mzanshiBalance.toLocaleString('en-US')}</strong></div>
           </div>
         </div>
 
-        {/* Markets */}
+        {/* Markets Grid */}
         {!connected ? (
           <div className="text-center py-20">
             <Wallet size={64} className="mx-auto mb-6 text-gray-600" />
-            <p className="text-2xl text-gray-400">Connect your wallet to place bets and claim {TOKEN_NAME} airdrop</p>
-            <p className="text-lg text-gray-500 mt-4">Phantom or Brave Wallet recommended</p>
+            <p className="text-2xl text-gray-400">Connect wallet to bet & claim airdrop</p>
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -260,7 +339,7 @@ function HomeContent() {
           </div>
         )}
 
-        {/* Market Detail Modal */}
+        {/* Bet Modal */}
         <Dialog open={selectedMarket !== null} onOpenChange={() => setSelectedMarket(null)}>
           <DialogContent className="bg-gray-900 border-green-500 text-green-400 max-w-3xl max-h-[90vh] overflow-y-auto">
             {market && (
@@ -296,6 +375,7 @@ function HomeContent() {
                         onClick={() => setPaymentMethod('ZAR')}
                         variant={paymentMethod === 'ZAR' ? 'default' : 'outline'}
                         className={paymentMethod === 'ZAR' ? 'bg-green-600 hover:bg-green-500' : 'border-green-500'}
+                        disabled={isBetting}
                       >
                         Pay with ZAR
                         {paymentMethod === 'ZAR' && <Zap className="ml-2" size={20} />}
@@ -304,7 +384,7 @@ function HomeContent() {
                         onClick={() => setPaymentMethod('$MZANSHI')}
                         variant={paymentMethod === '$MZANSHI' ? 'default' : 'outline'}
                         className={paymentMethod === '$MZANSHI' ? 'bg-purple-600 hover:bg-purple-500' : 'border-purple-500'}
-                        disabled={mzanshiBalance === 0}
+                        disabled={mzanshiBalance === 0 || isBetting}
                       >
                         Pay with {TOKEN_NAME}
                         {paymentMethod === '$MZANSHI' && <Zap className="ml-2" size={20} />}
@@ -312,7 +392,7 @@ function HomeContent() {
                     </div>
 
                     <div className="text-center text-sm text-gray-400 mb-4">
-                      {paymentMethod === 'ZAR' ? `Using ZAR balance: R${wallet.toLocaleString('en-US')}` : `Using ${TOKEN_NAME} balance: ${mzanshiBalance.toLocaleString('en-US')}`}
+                      {paymentMethod === 'ZAR' ? `ZAR balance: R${zarBalance.toLocaleString('en-US')}` : `Balance: ${mzanshiBalance.toLocaleString('en-US')} ${TOKEN_NAME}`}
                     </div>
 
                     <label className="block text-center text-lg mb-6">
@@ -324,6 +404,7 @@ function HomeContent() {
                         className="w-40 ml-4 px-4 py-2 bg-gray-900 border border-green-500 rounded text-center text-white"
                         min="10"
                         step="10"
+                        disabled={isBetting}
                       />
                     </label>
 
@@ -339,11 +420,19 @@ function HomeContent() {
                     </div>
 
                     <div className="flex justify-center gap-6 mt-8">
-                      <Button onClick={() => buy("YES", market.yes, true)} className="bg-green-600 hover:bg-green-500 text-xl px-10 py-6">
-                        BET YES ({paymentMethod})
+                      <Button
+                        onClick={() => buy("YES", market.yes, true)}
+                        disabled={isBetting}
+                        className="bg-green-600 hover:bg-green-500 text-xl px-10 py-6"
+                      >
+                        {isBetting ? 'Processing...' : `BET YES (${paymentMethod})`}
                       </Button>
-                      <Button onClick={() => buy("NO", market.no, true)} className="bg-red-600 hover:bg-red-500 text-xl px-10 py-6">
-                        BET NO ({paymentMethod})
+                      <Button
+                        onClick={() => buy("NO", market.no, true)}
+                        disabled={isBetting}
+                        className="bg-red-600 hover:bg-red-500 text-xl px-10 py-6"
+                      >
+                        {isBetting ? 'Processing...' : `BET NO (${paymentMethod})`}
                       </Button>
                     </div>
                   </div>
